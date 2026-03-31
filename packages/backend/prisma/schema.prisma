@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id                 String               @id @default(cuid())
+  name               String
+  slug               String               @unique
+  ownerName          String
+  email              String               @unique
+  passwordHash       String
+  phone              String?
+  bankAccount        String?
+  bankName           String?
+  logoUrl            String?
+  reservationMins    Int                  @default(30)
+  blacklistThreshold Int                  @default(3)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  products           Product[]
+  liveSessions       LiveSession[]
+  orders             Order[]
+  customers          Customer[]
+  promotions         Promotion[]
+  platforms          PlatformConnection[]
+}
+
+model PlatformConnection {
+  id           String      @id @default(cuid())
+  shopId       String
+  platform     Platform
+  pageId       String
+  pageName     String
+  accessToken  String      @db.Text
+  refreshToken String?     @db.Text
+  tokenExpiry  DateTime?
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  shop         Shop        @relation(fields: [shopId], references: [id])
+  liveSessions LiveSession[]
+
+  @@unique([shopId, platform, pageId])
+}
+
+enum Platform {
+  FACEBOOK
+  TIKTOK
+  INSTAGRAM
+}
+
+model Product {
+  id           String           @id @default(cuid())
+  shopId        String
+  name          String
+  code          String
+  description   String?          @db.Text
+  price         Decimal          @db.Decimal(10, 2)
+  cost          Decimal?         @db.Decimal(10, 2)
+  imageUrl      String?
+  isActive      Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  shop          Shop             @relation(fields: [shopId], references: [id])
+  variants      ProductVariant[]
+  orderItems    OrderItem[]
+  liveProducts  LiveProduct[]
+
+  @@unique([shopId, code])
+}
+
+model ProductVariant {
+  id         String          @id @default(cuid())
+  productId   String
+  name        String
+  sku         String
+  stock       Int             @default(0)
+  reserved    Int             @default(0)
+  price       Decimal?        @db.Decimal(10, 2)
+  isActive    Boolean         @default(true)
+  product     Product         @relation(fields: [productId], references: [id])
+  orderItems  OrderItem[]
+
+  @@unique([productId, sku])
+}
+
+model LiveSession {
+  id             String             @id @default(cuid())
+  shopId         String
+  platformConnId String
+  platformLiveId String?
+  title          String?
+  status         LiveStatus         @default(PREPARING)
+  startedAt      DateTime?
+  endedAt        DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  shop           Shop               @relation(fields: [shopId], references: [id])
+  platformConn   PlatformConnection @relation(fields: [platformConnId], references: [id])
+  comments       LiveComment[]
+  liveProducts   LiveProduct[]
+  orders         Order[]
+}
+
+enum LiveStatus {
+  PREPARING
+  LIVE
+  ENDED
+}
+
+model LiveProduct {
+  id            String      @id @default(cuid())
+  liveSessionId String
+  productId     String
+  showcaseOrder Int         @default(0)
+  showcasedAt   DateTime?
+  liveSession   LiveSession @relation(fields: [liveSessionId], references: [id])
+  product       Product     @relation(fields: [productId], references: [id])
+}
+
+model LiveComment {
+  id                String        @id @default(cuid())
+  liveSessionId     String
+  platformCommentId String
+  platformUserId    String
+  displayName       String
+  text              String        @db.Text
+  intent            CommentIntent @default(UNKNOWN)
+  processedAt       DateTime?
+  orderId           String?
+  createdAt         DateTime      @default(now())
+  liveSession       LiveSession   @relation(fields: [liveSessionId], references: [id])
+  order             Order?        @relation(fields: [orderId], references: [id])
+
+  @@unique([liveSessionId, platformCommentId])
+}
+
+enum CommentIntent {
+  PURCHASE
+  QUESTION
+  UNKNOWN
+}
+
+model Customer {
+  id            String                 @id @default(cuid())
+  shopId         String
+  displayName    String
+  phone          String?
+  address        String?                @db.Text
+  district       String?
+  province       String?
+  postalCode     String?
+  tier           CustomerTier           @default(NORMAL)
+  noShowCount    Int                    @default(0)
+  totalOrders    Int                    @default(0)
+  totalSpent     Decimal                @default(0) @db.Decimal(12, 2)
+  note           String?                @db.Text
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  shop           Shop                   @relation(fields: [shopId], references: [id])
+  platformLinks  CustomerPlatformLink[]
+  orders         Order[]
+}
+
+enum CustomerTier {
+  VIP
+  NORMAL
+  BLACKLISTED
+}
+
+model CustomerPlatformLink {
+  id             String   @id @default(cuid())
+  customerId      String
+  platform        Platform
+  platformUserId  String
+  displayName     String
+  customer        Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([customerId, platform, platformUserId])
+}
+
+model Order {
+  id             String           @id @default(cuid())
+  orderNumber    String           @unique
+  shopId         String
+  customerId     String?
+  liveSessionId  String?
+  status         OrderStatus      @default(RESERVED)
+  subtotal       Decimal          @db.Decimal(10, 2)
+  discount       Decimal          @default(0) @db.Decimal(10, 2)
+  shippingFee    Decimal          @default(0) @db.Decimal(10, 2)
+  total          Decimal          @db.Decimal(10, 2)
+  note           String?          @db.Text
+  reservedUntil  DateTime?
+  paidAt         DateTime?
+  shippedAt      DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  shop           Shop             @relation(fields: [shopId], references: [id])
+  customer       Customer?        @relation(fields: [customerId], references: [id])
+  liveSession    LiveSession?     @relation(fields: [liveSessionId], references: [id])
+  items          OrderItem[]
+  payments       Payment[]
+  shipment       Shipment?
+  comments       LiveComment[]
+  promotionUsages PromotionUsage[]
+}
+
+enum OrderStatus {
+  RESERVED
+  PENDING_PAY
+  PAID
+  PACKING
+  SHIPPED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+model OrderItem {
+  id           String          @id @default(cuid())
+  orderId      String
+  productId    String
+  variantId    String?
+  productName  String
+  variantName  String?
+  quantity     Int
+  unitPrice    Decimal         @db.Decimal(10, 2)
+  totalPrice   Decimal         @db.Decimal(10, 2)
+  order        Order           @relation(fields: [orderId], references: [id])
+  product      Product         @relation(fields: [productId], references: [id])
+  variant      ProductVariant? @relation(fields: [variantId], references: [id])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId        String
+  amount         Decimal       @db.Decimal(10, 2)
+  method         PaymentMethod @default(BANK_TRANSFER)
+  slipImageUrl   String?
+  ocrResult      Json?
+  ocrStatus      OcrStatus?
+  ocrConfidence  Float?
+  verifiedAt     DateTime?
+  verifiedBy     String?
+  status         PaymentStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  order          Order         @relation(fields: [orderId], references: [id])
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  PROMPTPAY
+  COD
+}
+
+enum PaymentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  REFUNDED
+}
+
+enum OcrStatus {
+  PROCESSING
+  SUCCESS
+  FAILED
+  SUSPICIOUS
+}
+
+model Shipment {
+  id             String         @id @default(cuid())
+  orderId        String         @unique
+  carrier        Carrier
+  trackingNumber String?
+  labelUrl       String?
+  status         ShipmentStatus @default(PENDING)
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  order          Order          @relation(fields: [orderId], references: [id])
+}
+
+enum Carrier {
+  KERRY
+  FLASH
+  JT
+  THAIPOST
+  OTHER
+}
+
+enum ShipmentStatus {
+  PENDING
+  LABEL_PRINTED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+}
+
+model Promotion {
+  id              String           @id @default(cuid())
+  shopId           String
+  name             String
+  type             PromoType
+  minQuantity      Int?
+  minAmount        Decimal?         @db.Decimal(10, 2)
+  discountAmount   Decimal?         @db.Decimal(10, 2)
+  discountPercent  Float?
+  isActive         Boolean          @default(true)
+  startDate        DateTime?
+  endDate          DateTime?
+  createdAt        DateTime         @default(now())
+  shop             Shop             @relation(fields: [shopId], references: [id])
+  usages           PromotionUsage[]
+}
+
+enum PromoType {
+  QUANTITY_DISCOUNT
+  FREE_SHIPPING
+  PERCENTAGE
+  FIXED_DISCOUNT
+}
+
+model PromotionUsage {
+  id          String    @id @default(cuid())
+  promotionId String
+  orderId     String
+  discount    Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+  promotion   Promotion @relation(fields: [promotionId], references: [id])
+  order       Order     @relation(fields: [orderId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  shopId    String
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+enum NotificationType {
+  LOW_STOCK
+  ORDER_UNPAID
+  PAYMENT_RECEIVED
+  SALES_MILESTONE
+  SUSPICIOUS_SLIP
+  ORDER_EXPIRED
+}
