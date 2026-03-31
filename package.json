@@ -1,0 +1,21 @@
+{
+  "name": "live-commerce",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:migrate": "npm --workspace @live-commerce/backend run prisma:migrate",
+    "db:seed": "npm --workspace @live-commerce/backend run prisma:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.1"
+  },
+  "packageManager": "npm@10.8.2"
+}
